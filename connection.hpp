@@ -7,6 +7,7 @@
 #include <boost/archive/binary_oarchive.hpp>
 
 #include <boost/bind.hpp>
+#include <boost/array.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
 
@@ -56,8 +57,7 @@ public:
 		{
 			oar oa(out);
 			oa << t;
-			// archive closed when destructors are called
-		}
+		}// archive have to be closed before out.pop()
 
 		out.pop ();
 
@@ -76,9 +76,10 @@ public:
 
 	  // Write the serialized data to the socket. We use "gather-write" to send
 	  // both the header and the data in a single write operation.
-	  std::vector<boost::asio::const_buffer> buffers;
-	  buffers.push_back(boost::asio::buffer(outbound_header_));
-	  buffers.push_back(boost::asio::buffer(outbound_data_));
+	  boost::array<boost::asio::const_buffer, 2> buffers = {
+		  boost::asio::buffer(outbound_header_),
+		  boost::asio::buffer(outbound_data_)
+	  };
 	  boost::asio::async_write(*this, buffers, handler);
 	}
 
@@ -127,7 +128,8 @@ public:
 	        const boost::system::error_code&,
 	        T&, boost::tuple<Handler>)
 	      = &connection::handle_read_data<T, Handler>;
-	    boost::asio::async_read(*this, boost::asio::buffer(inbound_data_),
+	    boost::asio::async_read(*this, 
+			 boost::asio::buffer(const_cast<char*>(inbound_data_.c_str ()),inbound_data_size),
 	      boost::bind(f, this,
 	        boost::asio::placeholders::error, boost::ref(t), handler));
 	  }
@@ -184,7 +186,7 @@ private:
 	char inbound_header_[header_length];
 
 	/// Holds the inbound data.
-	std::vector<char> inbound_data_;
+	std::string inbound_data_;
 };
 
 typedef boost::shared_ptr<connection> connection_ptr;
