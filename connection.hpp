@@ -12,6 +12,8 @@
 #include <sstream>
 #include <vector>
 
+#include "filter/filter.h"
+
 namespace NetCore{
 
 typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket> ssl_socket;
@@ -42,7 +44,8 @@ public:
 	  std::ostringstream archive_stream;
 	  oar archive(archive_stream);
 	  archive << t;
-	  outbound_data_ = archive_stream.str();
+	  //outbound_data_ = archive_stream.str();
+	  outbound_data_ = filter::bzip2compressor(archive_stream.str());
 
 	  // Format the header.
 	  std::ostringstream header_stream;
@@ -131,6 +134,9 @@ public:
 	    try
 	    {
 	      std::string archive_data(&inbound_data_[0], inbound_data_.size());
+
+			archive_data = filter::bzip2decompressor(archive_data);//本来没有这句话
+
 	      std::istringstream archive_stream(archive_data);
 	      iar archive(archive_stream);
 	      archive >> t;

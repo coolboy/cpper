@@ -63,9 +63,10 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libeay32.lib ssleay32.lib"
+				AdditionalDependencies="libeay32.lib ssleay32.lib filter.lib"
+				OutputFile="$(SolutionDir)\bin\$(ProjectName).exe"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories=".."
+				AdditionalLibraryDirectories="..;..\lib"
 				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="true"
 				SubSystem="0"
@@ -147,9 +148,10 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libeay32.lib ssleay32.lib"
+				AdditionalDependencies="libeay32.lib ssleay32.lib filter.lib"
+				OutputFile="$(SolutionDir)\bin\$(ProjectName).exe"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories=".."
+				AdditionalLibraryDirectories="..;..\lib"
 				GenerateManifest="true"
 				UACExecutionLevel="2"
 				GenerateDebugInformation="true"
