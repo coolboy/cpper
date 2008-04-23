@@ -2,17 +2,23 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
+
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
+
 #include <boost/bind.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
+
+#include <boost/iostreams/stream.hpp> 
+#include <boost/iostreams/device/back_inserter.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/filter/bzip2.hpp>
+
 #include <iomanip>
 #include <string>
 #include <sstream>
 #include <vector>
-
-#include "filter/filter.h"
 
 namespace NetCore{
 
@@ -40,12 +46,20 @@ public:
 	template <typename T, typename Handler>
 	void async_write(const T& t, Handler handler)
 	{
-	  // Serialize the data first so we know how large it is.
-	  std::ostringstream archive_stream;
-	  oar archive(archive_stream);
-	  archive << t;
-	  //outbound_data_ = archive_stream.str();
-	  outbound_data_ = filter::bzip2compressor(archive_stream.str());
+		outbound_data_.clear ();
+
+		boost::iostreams::filtering_ostream out;
+
+		out.push(boost::iostreams::bzip2_compressor());
+		out.push(boost::iostreams::back_inserter(outbound_data_));
+
+		{
+			oar oa(out);
+			oa << t;
+			// archive closed when destructors are called
+		}
+
+		out.pop ();
 
 	  // Format the header.
 	  std::ostringstream header_stream;
@@ -133,13 +147,15 @@ public:
 	    // Extract the data structure from the data just received.
 	    try
 	    {
-	      std::string archive_data(&inbound_data_[0], inbound_data_.size());
+			boost::iostreams::filtering_istream in;
 
-			archive_data = filter::bzip2decompressor(archive_data);//本来没有这句话
+			in.push(boost::iostreams::bzip2_decompressor());
+			in.push(boost::make_iterator_range(inbound_data_));
 
-	      std::istringstream archive_stream(archive_data);
-	      iar archive(archive_stream);
-	      archive >> t;
+			{
+				iar ia(in);
+				ia >> t;
+			}
 	    }
 	    catch (std::exception& e)
 	    {

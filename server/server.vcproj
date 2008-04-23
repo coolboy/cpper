@@ -21,7 +21,7 @@
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
-			CharacterSet="2"
+			CharacterSet="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -42,7 +42,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories=".."
-				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS"
+				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;_SCL_SECURE_NO_WARNINGS;_WIN32_WINNT=0x0600"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -63,7 +63,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libeay32.lib ssleay32.lib filter.lib"
+				AdditionalDependencies="libeay32.lib ssleay32.lib"
 				OutputFile="$(SolutionDir)\bin\$(ProjectName).exe"
 				LinkIncremental="2"
 				AdditionalLibraryDirectories="..;..\lib"
@@ -101,7 +101,7 @@
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
-			CharacterSet="2"
+			CharacterSet="1"
 			WholeProgramOptimization="1"
 			>
 			<Tool
@@ -127,7 +127,7 @@
 				OmitFramePointers="true"
 				WholeProgramOptimization="false"
 				AdditionalIncludeDirectories=".."
-				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS"
+				PreprocessorDefinitions="_CRT_SECURE_NO_WARNINGS;_SCL_SECURE_NO_WARNINGS;_WIN32_WINNT=0x0600"
 				StringPooling="true"
 				RuntimeLibrary="2"
 				BufferSecurityCheck="false"
@@ -148,7 +148,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libeay32.lib ssleay32.lib filter.lib"
+				AdditionalDependencies="libeay32.lib ssleay32.lib"
 				OutputFile="$(SolutionDir)\bin\$(ProjectName).exe"
 				LinkIncremental="1"
 				AdditionalLibraryDirectories="..;..\lib"
