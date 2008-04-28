@@ -48,9 +48,9 @@ namespace NetCore {
 		}
 
 		/// Handle completion of a accept operation.
-		void handle_accept(const boost::system::error_code& e, connection_ptr conn)
+		void handle_accept(const boost::system::error_code& error, connection_ptr conn)
 		{
-			if (!e)
+			if (!error)
 			{
 				conn->async_handshake(boost::asio::ssl::stream_base::server, 
 					boost::bind(&server::handle_handshake, this,
@@ -67,13 +67,13 @@ namespace NetCore {
 				// An error occurred. Log it and return. Since we are not starting a new
 				// accept operation the io_service will run out of work to do and the
 				// server will exit.
-				std::cerr << e.message() << std::endl;
+				std::cerr << error.message() << std::endl;
 			}
 		}
 
-		void handle_handshake(const boost::system::error_code& e, connection_ptr conn)
+		void handle_handshake(const boost::system::error_code& error, connection_ptr conn)
 		{
-			if (!e)
+			if (!error)
 			{
 				// Successfully accepted a new connection. Send the list of stocks to the
 				// client. The connection::async_write() function will automatically
@@ -87,7 +87,7 @@ namespace NetCore {
 				// An error occurred. Log it and return. Since we are not starting a new
 				// accept operation the io_service will run out of work to do and the
 				// server will exit.
-				std::cerr << e.message() << std::endl;
+				std::cerr << error.message() << std::endl;
 			}
 		}
 
