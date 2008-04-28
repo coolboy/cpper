@@ -49,7 +49,7 @@ public:
 	{
 		outbound_data_.clear ();
 
-		boost::iostreams::filtering_ostream out;
+		boost::iostreams::filtering_ostreambuf out;
 
 		out.push(boost::iostreams::bzip2_compressor());
 		out.push(boost::iostreams::back_inserter(outbound_data_));
@@ -149,7 +149,7 @@ public:
 	    // Extract the data structure from the data just received.
 	    try
 	    {
-			boost::iostreams::filtering_istream in;
+			boost::iostreams::filtering_istreambuf in;
 
 			in.push(boost::iostreams::bzip2_decompressor());
 			in.push(boost::make_iterator_range(inbound_data_));

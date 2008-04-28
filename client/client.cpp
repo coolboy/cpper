@@ -33,10 +33,10 @@ public:
   }
 
   /// Handle completion of a connect operation.
-  void handle_connect(const boost::system::error_code& e,
+  void handle_connect(const boost::system::error_code& error,
       boost::asio::ip::tcp::resolver::iterator endpoint_iterator)
   {
-    if (!e)
+    if (!error)
     {
 		 connection_.async_handshake(boost::asio::ssl::stream_base::client,
 			 boost::bind(&client::handle_handshake, this,
@@ -56,7 +56,7 @@ public:
       // An error occurred. Log it and return. Since we are not starting a new
       // operation the io_service will run out of work to do and the client will
       // exit.
-      std::cerr << e.message() << std::endl;
+      std::cerr << error.message() << std::endl;
     }
   }
 
@@ -78,9 +78,9 @@ public:
   }
 
   /// Handle completion of a read operation.
-  void handle_read(const boost::system::error_code& e)
+  void handle_read(const boost::system::error_code& error)
   {
-    if (!e)
+    if (!error)
     {
       // Print out the data that was received.
       for each (stock st in stocks_)
@@ -91,7 +91,7 @@ public:
     else
     {
       // An error occurred.
-      std::cerr << e.message() << std::endl;
+      std::cerr << error.message() << std::endl;
     }
 
     // Since we are not starting a new operation the io_service will run out of
