@@ -10,9 +10,9 @@
 #include "stock.hpp"
 
 /// The data to be sent to each client.
-std::vector<NetCore::stock> g_stocks;
+std::vector<network::stock> g_stocks;
 
-namespace NetCore {
+namespace network {
 
 	/// Serves stock quote information to any client that connects to it.
 	class server
@@ -105,12 +105,12 @@ namespace NetCore {
 		boost::asio::ssl::context context_;
 	};
 
-} // namespace NetCore
+} // namespace network
 
 void InitTestData()
 {
 	// Create the data to be sent to each client.
-	NetCore::stock s;
+	network::stock s;
 	s.code = "ABC";
 	s.name = "A Big Company";
 	s.open_price = 4.56;
@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
 		unsigned short port = boost::lexical_cast<unsigned short>(argv[1]);
 
 		boost::asio::io_service io_service;
-		NetCore::server server(io_service, port);
+		network::server server(io_service, port);
 		io_service.run();
 	}
 	catch (std::exception& e)
