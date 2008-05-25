@@ -36,6 +36,7 @@ class connection : public ssl_socket
 {
 	typedef boost::archive::binary_oarchive oar;
 	typedef boost::archive::binary_iarchive iar;
+	typedef boost::shared_ptr<std::string> buffer_ptr;
 public:
 	/// Constructor.
 	connection(boost::asio::io_service& io_service, boost::asio::ssl::context& context)
@@ -52,12 +53,12 @@ public:
 	template <typename T, typename Handler>
 	void async_write(const T& t, Handler handler)
 	{
-		outbound_data_.clear ();
+		buffer_ptr outbound_data_(new std::string), outbound_header_(new std::string);
 
 		boost::iostreams::filtering_ostreambuf out;
 
 		out.push(boost::iostreams::bzip2_compressor());
-		out.push(boost::iostreams::back_inserter(outbound_data_));
+		out.push(boost::iostreams::back_inserter(*outbound_data_));
 
 		{
 			oar oa(out);
@@ -69,7 +70,7 @@ public:
 		// Format the header.
 		std::ostringstream header_stream;
 		header_stream << std::setw(header_length)
-			<< std::hex << outbound_data_.size();
+			<< std::hex << outbound_data_->size();
 		if (!header_stream || header_stream.str().size() != header_length)
 		{
 			// Something went wrong, inform the caller.
@@ -77,29 +78,49 @@ public:
 			io_service().post(boost::bind(handler, error));
 			return;
 		}
-		outbound_header_ = header_stream.str();
+		*outbound_header_ = header_stream.str();
 
 		// Write the serialized data to the socket. We use "gather-write" to send
 		// both the header and the data in a single write operation.
 		boost::array<boost::asio::const_buffer, 2> buffers = {
-			boost::asio::buffer(outbound_header_),
-			boost::asio::buffer(outbound_data_)
+			boost::asio::buffer(*outbound_header_),
+			boost::asio::buffer(*outbound_data_)
 		};
-		boost::asio::async_write(*this, buffers, handler);
+
+		void (connection::*f)(
+			const boost::system::error_code&,
+			buffer_ptr, buffer_ptr,
+			boost::tuple<Handler>)
+			= &connection::handle_async_write<Handler>;
+		boost::asio::async_write(*this, buffers, 
+			boost::bind(f, this, boost::asio::placeholders::error,
+			outbound_header_, outbound_data_, boost::make_tuple(handler)));
+	}
+
+	/// free the data buffer after the async_write complete
+	template <typename Handler>
+	void handle_async_write(const boost::system::error_code& error,
+		buffer_ptr headPtr,
+		buffer_ptr dataPtr,
+		boost::tuple<Handler> handler)
+	{
+		boost::get<0>(handler)(error);
 	}
 
 	/// Asynchronously read a data structure from the socket.
 	template <typename T, typename Handler>
 	void async_read(T& t, Handler handler)
 	{
+		buffer_ptr inbound_header_(new std::string(header_length, 0));
 		// Issue a read operation to read exactly the number of bytes in a header.
 		void (connection::*f)(
 			const boost::system::error_code&,
-			T&, boost::tuple<Handler>)
+			T&, buffer_ptr, boost::tuple<Handler>)
 			= &connection::handle_read_header<T, Handler>;
-		boost::asio::async_read(*this, boost::asio::buffer(inbound_header_),
+		boost::asio::async_read(*this, 
+			boost::asio::buffer(const_cast<char*>(inbound_header_->c_str ()), header_length),
 			boost::bind(f,
-			this, boost::asio::placeholders::error, boost::ref(t),
+			this, boost::asio::placeholders::error, boost::ref(t), inbound_header_,
 			boost::make_tuple(handler)));
 	}
 
@@ -108,7 +129,7 @@ public:
 	/// created using boost::bind as a parameter.
 	template <typename T, typename Handler>
 	void handle_read_header(const boost::system::error_code& e,
-		T& t, boost::tuple<Handler> handler)
+		T& t, buffer_ptr headPtr, boost::tuple<Handler> handler)
 	{
 		if (e)
 		{
@@ -117,7 +138,7 @@ public:
 		else
 		{
 			// Determine the length of the serialized data.
-			std::istringstream is(std::string(inbound_header_, header_length));
+			std::istringstream is(*headPtr);
 			std::size_t inbound_data_size = 0;
 			if (!(is >> std::hex >> inbound_data_size))
 			{
@@ -128,22 +149,22 @@ public:
 			}
 
 			// Start an asynchronous call to receive the data.
-			inbound_data_.resize(inbound_data_size);
+			buffer_ptr inbound_data_(new std::string(inbound_data_size, 0));
 			void (connection::*f)(
 				const boost::system::error_code&,
-				T&, boost::tuple<Handler>)
+				T&, buffer_ptr, boost::tuple<Handler>)
 				= &connection::handle_read_data<T, Handler>;
 			boost::asio::async_read(*this, 
-				boost::asio::buffer(const_cast<char*>(inbound_data_.c_str ()),inbound_data_size),
+				boost::asio::buffer(const_cast<char*>(inbound_data_->c_str ()),inbound_data_size),
 				boost::bind(f, this,
-				boost::asio::placeholders::error, boost::ref(t), handler));
+				boost::asio::placeholders::error, boost::ref(t), inbound_data_, handler));
 		}
 	}
 
 	/// Handle a completed read of message data.
 	template <typename T, typename Handler>
 	void handle_read_data(const boost::system::error_code& e,
-		T& t, boost::tuple<Handler> handler)
+		T& t, buffer_ptr dataPtr, boost::tuple<Handler> handler)
 	{
 		if (e)
 		{
@@ -157,7 +178,7 @@ public:
 				boost::iostreams::filtering_istreambuf in;
 
 				in.push(boost::iostreams::bzip2_decompressor());
-				in.push(boost::make_iterator_range(inbound_data_));
+				in.push(boost::make_iterator_range(*dataPtr));
 
 				{
 					iar ia(in);
@@ -180,18 +201,6 @@ public:
 private:
 	/// The size of a fixed length header.
 	enum { header_length = 8 };
-
-	/// Holds an outbound header.
-	std::string outbound_header_;
-
-	/// Holds the outbound data.
-	std::string outbound_data_;
-
-	/// Holds an inbound header.
-	char inbound_header_[header_length];
-
-	/// Holds the inbound data.
-	std::string inbound_data_;
 };
 
 typedef boost::shared_ptr<connection> connection_ptr;
