@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace NetCore {
+namespace network {
 
 /// Structure to hold information about a single stock.
 struct stock
@@ -49,4 +49,4 @@ std::ostream& operator << (std::ostream& ostrm, const stock& obj)
 	return ostrm;
 }
 
-} // namespace NetCore
+} // namespace network

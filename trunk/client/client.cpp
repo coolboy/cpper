@@ -8,7 +8,7 @@
 #include <boost/serialization/vector.hpp>
 #include "stock.hpp"
 
-namespace NetCore {
+namespace network {
 
 /// Downloads stock quote information from a server.
 class client
@@ -108,7 +108,7 @@ private:
 
 };
 
-} // namespace NetCore
+} // namespace network
 
 int main(int argc, char* argv[])
 {
@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
 	 ctx.set_verify_mode(boost::asio::ssl::context::verify_peer);
 	 ctx.load_verify_file("ca.pem");
 
-    NetCore::client client(io_service, ctx, argv[1], argv[2]);
+    network::client client(io_service, ctx, argv[1], argv[2]);
     io_service.run();
   }
   catch (std::exception& e)
