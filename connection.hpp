@@ -7,9 +7,9 @@
 #include <boost/archive/binary_oarchive.hpp>
 
 #include <boost/bind.hpp>
-#include <boost/array.hpp>
 #include <boost/shared_ptr.hpp>
-#include <boost/tuple/tuple.hpp>
+#include <boost/thread/mutex.hpp>
+#include <boost/thread/thread.hpp>
 
 #include <boost/iostreams/stream.hpp> 
 #include <boost/iostreams/device/back_inserter.hpp>
@@ -20,6 +20,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <map>
 
 namespace network
 {
@@ -54,13 +55,14 @@ public:
 	template <typename T/*, typename Handler*/>
 	void async_write(const T& t, Handler handler)
 	{
+		boost::mutex::scoped_lock lck(mtx_);
 		buffer_ptr outbound_header_(new std::string);
 		std::string outbound_data_;
 
 		boost::iostreams::filtering_ostreambuf out;
 
 		out.push(boost::iostreams::bzip2_compressor());
-		out.push(boost::iostreams::back_inserter(*outbound_data_));
+		out.push(boost::iostreams::back_inserter(outbound_data_));
 
 		{
 			oar oa(out);
@@ -82,7 +84,7 @@ public:
 		}
 		*outbound_header_ = header_stream.str() + outbound_data_;
 		
-		boost::asio::async_write(*this, buffers, 
+		boost::asio::async_write(*this, boost::asio::buffer(*outbound_header_), 
 			boost::bind(&connection::handle_async_write, this, boost::asio::placeholders::error,
 			outbound_header_, handler));
 	}
@@ -93,6 +95,7 @@ public:
 		buffer_ptr dataPtr,
 		Handler handler)
 	{
+		boost::mutex::scoped_lock lck(mtx_);
 		handler(error);
 	}
 
@@ -189,6 +192,13 @@ public:
 private:
 	/// The size of a fixed length header.
 	enum { header_length = 8 };
+
+	//
+	boost::mutex mtx_;
+
+	//write_buf
+	std::map<buffer_ptr, Handler> op_buf_;
+
 };
 
 typedef boost::shared_ptr<connection> connection_ptr;
