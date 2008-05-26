@@ -42,7 +42,8 @@ public:
 	typedef boost::function<void(const boost::system::error_code& error)> Handler;
 	/// Constructor.
 	connection(boost::asio::io_service& io_service, boost::asio::ssl::context& context)
-		: ssl_socket(io_service, context)
+		: ssl_socket(io_service, context),
+		write_pending_(false)
 	{
 	}
 
@@ -52,7 +53,7 @@ public:
 
 
 	/// Asynchronously write a data structure to the socket.
-	template <typename T/*, typename Handler*/>
+	template <typename T>
 	void async_write(const T& t, Handler handler)
 	{
 		boost::mutex::scoped_lock lck(mtx_);
@@ -82,11 +83,22 @@ public:
 			io_service().post(boost::bind(handler, error));
 			return;
 		}
+
+		//combine the header + data [size + actual data]
 		*outbound_header_ = header_stream.str() + outbound_data_;
+
+		if (write_pending_ == true)
+		{
+			op_buf_[outbound_header_] = handler;
+		}
+		else
+		{
+			write_pending_ = true;
+			boost::asio::async_write(*this, boost::asio::buffer(*outbound_header_), 
+				boost::bind(&connection::handle_async_write, this, boost::asio::placeholders::error,
+				outbound_header_, handler));
+		}
 		
-		boost::asio::async_write(*this, boost::asio::buffer(*outbound_header_), 
-			boost::bind(&connection::handle_async_write, this, boost::asio::placeholders::error,
-			outbound_header_, handler));
 	}
 
 	/// free the data buffer after the async_write complete
@@ -96,7 +108,24 @@ public:
 		Handler handler)
 	{
 		boost::mutex::scoped_lock lck(mtx_);
+
+		op_buf_.erase (dataPtr);
 		handler(error);
+
+		if (op_buf_.empty())
+		{
+			write_pending_ = false;
+		}
+		else
+		{
+			write_pending_ = true;
+
+			OpContainer::iterator itor = op_buf_.begin();
+
+			boost::asio::async_write(*this, boost::asio::buffer(*(itor->first)), 
+				boost::bind(&connection::handle_async_write, this, boost::asio::placeholders::error,
+				itor->first, itor->second));
+		}
 	}
 
 	/// Asynchronously read a data structure from the socket.
@@ -193,12 +222,15 @@ private:
 	/// The size of a fixed length header.
 	enum { header_length = 8 };
 
-	//
+	/// make async_write thread safe
 	boost::mutex mtx_;
 
-	//write_buf
-	std::map<buffer_ptr, Handler> op_buf_;
+	/// write_buf
+	typedef std::map<buffer_ptr, Handler> OpContainer;
+	OpContainer op_buf_;
 
+	/// is there any pending write
+	bool write_pending_;
 };
 
 typedef boost::shared_ptr<connection> connection_ptr;
