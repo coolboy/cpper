@@ -54,7 +54,8 @@ public:
 	template <typename T/*, typename Handler*/>
 	void async_write(const T& t, Handler handler)
 	{
-		buffer_ptr outbound_data_(new std::string), outbound_header_(new std::string);
+		buffer_ptr outbound_header_(new std::string);
+		std::string outbound_data_;
 
 		boost::iostreams::filtering_ostreambuf out;
 
@@ -71,7 +72,7 @@ public:
 		// Format the header.
 		std::ostringstream header_stream;
 		header_stream << std::setw(header_length)
-			<< std::hex << outbound_data_->size();
+			<< std::hex << outbound_data_.size();
 		if (!header_stream || header_stream.str().size() != header_length)
 		{
 			// Something went wrong, inform the caller.
@@ -79,29 +80,16 @@ public:
 			io_service().post(boost::bind(handler, error));
 			return;
 		}
-		*outbound_header_ = header_stream.str();
-
-		// Write the serialized data to the socket. We use "gather-write" to send
-		// both the header and the data in a single write operation.
-		boost::array<boost::asio::const_buffer, 2> buffers = {
-			boost::asio::buffer(*outbound_header_),
-			boost::asio::buffer(*outbound_data_)
-		};
-
-		void (connection::*f)(
-			const boost::system::error_code&,
-			buffer_ptr, buffer_ptr,
-			Handler)
-			= &connection::handle_async_write;
+		*outbound_header_ = header_stream.str() + outbound_data_;
+		
 		boost::asio::async_write(*this, buffers, 
-			boost::bind(f, this, boost::asio::placeholders::error,
-			outbound_header_, outbound_data_, handler));
+			boost::bind(&connection::handle_async_write, this, boost::asio::placeholders::error,
+			outbound_header_, handler));
 	}
 
 	/// free the data buffer after the async_write complete
 	//template <typename Handler>
 	void handle_async_write(const boost::system::error_code& error,
-		buffer_ptr headPtr,
 		buffer_ptr dataPtr,
 		Handler handler)
 	{
