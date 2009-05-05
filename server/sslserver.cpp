@@ -5,7 +5,7 @@
 #include <boost/lexical_cast.hpp>
 #include <iostream>
 #include <vector>
-#include "connection.hpp" // Must come before boost/serialization headers.
+#include "sslconnection.hpp" // Must come before boost/serialization headers.
 #include <boost/serialization/vector.hpp>
 #include "stock.hpp"
 
