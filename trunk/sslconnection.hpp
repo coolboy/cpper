@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
 
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
@@ -10,11 +11,6 @@
 #include <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/thread.hpp>
 
-#include <boost/iostreams/stream.hpp> 
-#include <boost/iostreams/device/back_inserter.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/zlib.hpp>
-
 #include <iomanip>
 #include <string>
 #include <sstream>
@@ -22,28 +18,40 @@
 #include <list>
 #include <algorithm>
 
+namespace network
+{
 
-typedef boost::asio::ip::tcp::socket connection_base;
+typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket> ssl_socket;
 
 /// The connection class provides serialization primitives on top of a socket.
-class connection : public connection_base
+/**
+* Each message sent using this class consists of:
+* @li An 8-byte header containing the length of the serialized data in
+* hexadecimal.
+* @li The serialized data.
+*/
+class connection : public ssl_socket, public boost::enable_shared_from_this<connection>
 {
 	typedef boost::archive::binary_oarchive oar;
 	typedef boost::archive::binary_iarchive iar;
 	typedef boost::shared_ptr<std::string> buffer_ptr;
+	typedef boost::shared_ptr<connection> shared_this_type; 
 public:
 	typedef boost::function<void(const boost::system::error_code& error)> Handler;
 	/// Constructor.
-	connection(boost::asio::io_service& io_service)
-		: connection_base(io_service),
-		write_pending_(false), read_pending_(false)
+	connection(boost::asio::io_service& io_service, boost::asio::ssl::context& context)
+		: ssl_socket(io_service, context),
+		write_pending_(false),
+		read_pending_(false)
 	{
 	}
 
 	~connection()
 	{
-		assert (wop_buf_.empty() == true || rop_buf_.empty() == true);
+		assert (wop_buf_.empty() == true);
+		assert (rop_buf_.empty() == true);
 	}
+
 
 	/// Asynchronously write a data structure to the socket.
 	template <typename T>
@@ -54,17 +62,13 @@ public:
 		buffer_ptr outbound_header_(new std::string);
 		std::string outbound_data_;
 
-		boost::iostreams::filtering_ostreambuf out;
-
-		out.push(boost::iostreams::zlib_compressor());
-		out.push(boost::iostreams::back_inserter(outbound_data_));
-
+		std::ostringstream out;
 		{
 			oar oa(out);
 			oa << t;
 		}// archive have to be closed before out.pop()
 
-		out.pop ();
+		outbound_data_ = out.str();
 
 		// Format the header.
 		std::ostringstream header_stream;
@@ -90,7 +94,7 @@ public:
 		{
 			write_pending_ = true;
 			boost::asio::async_write(*this, boost::asio::buffer(*outbound_header_), 
-				boost::bind(&connection::handle_async_write, this, boost::asio::placeholders::error,
+				boost::bind(&connection::handle_async_write, shared_from_this(), boost::asio::placeholders::error,
 				outbound_header_, handler));
 		}
 	}
@@ -107,6 +111,8 @@ private:
 		if (itor != wop_buf_.end())
 			wop_buf_.erase (itor);
 
+		handler(error);
+
 		if (wop_buf_.empty())
 		{
 			write_pending_ = false;
@@ -118,11 +124,9 @@ private:
 			WOpContainer::iterator itor = wop_buf_.begin();
 
 			boost::asio::async_write(*this, boost::asio::buffer(*(itor->dataPtr_)), 
-				boost::bind(&connection::handle_async_write, this, boost::asio::placeholders::error,
+				boost::bind(&connection::handle_async_write, shared_from_this(), boost::asio::placeholders::error,
 				itor->dataPtr_, itor->opHandler_));
 		}
-
-		handler(error); //放在最后执行,防止自己被删除.
 	}
 
 public:
@@ -145,10 +149,9 @@ public:
 			boost::asio::async_read(*this, 
 				boost::asio::buffer(const_cast<char*>(inbound_header_->c_str ()), header_length),
 				boost::bind(&connection::handle_read_header<T>,
-				this, boost::asio::placeholders::error, boost::ref(t), inbound_header_, handler));
+				shared_from_this(), boost::asio::placeholders::error, boost::ref(t), inbound_header_, handler));
 		}
 	}
-
 
 private:
 	/// Handle a completed read of a message header.
@@ -162,8 +165,9 @@ private:
 
 		if (err)
 		{
-			freeReadOpAndStartNew<T>(headPtr);
 			handler(err);
+
+			freeReadOpAndStartNew<T>(headPtr);
 		}
 		else
 		{
@@ -174,8 +178,8 @@ private:
 			{
 				// Header doesn't seem to be valid. Inform the caller.
 				boost::system::error_code error(boost::asio::error::invalid_argument);
-				freeReadOpAndStartNew<T>(headPtr);
 				handler(error);
+				freeReadOpAndStartNew<T>(headPtr);
 				return;
 			}
 
@@ -184,7 +188,7 @@ private:
 			headPtr->resize(inbound_data_size);
 			boost::asio::async_read(*this, 
 				boost::asio::buffer(const_cast<char*>(headPtr->c_str ()),inbound_data_size),
-				boost::bind(&connection::handle_read_data<T>, this,
+				boost::bind(&connection::handle_read_data<T>, shared_from_this(),
 				boost::asio::placeholders::error, boost::ref(t), headPtr, handler));
 		}
 	}
@@ -198,37 +202,35 @@ private:
 
 		if (err)
 		{
-			freeReadOpAndStartNew<T>(dataPtr);
 			handler(err);
-			return;
-		}
 
-		// Extract the data structure from the data just received.
-		try
-		{
-			boost::iostreams::filtering_istreambuf in;
-
-			in.push(boost::iostreams::zlib_decompressor());
-			in.push(boost::make_iterator_range(*dataPtr));
-
-			{
-				iar ia(in);
-				ia >> t;
-			}
-		}
-		catch (std::exception& /*e*/)
-		{
-			// Unable to decode data.
-			boost::system::error_code error(boost::asio::error::invalid_argument);
 			freeReadOpAndStartNew<T>(dataPtr);
-			handler(error);
-			return;
 		}
+		else
+		{
+			// Extract the data structure from the data just received.
+			try
+			{
+				std::istringstream in(*dataPtr);
+				{
+					iar ia(in);
+					ia >> t;
+				}
+			}
+			catch (std::exception& /*e*/)
+			{
+				// Unable to decode data.
+				boost::system::error_code error(boost::asio::error::invalid_argument);
+				handler(error);
+				freeReadOpAndStartNew<T>(dataPtr);
+				return;
+			}
 
-		freeReadOpAndStartNew<T>(dataPtr);
+			freeReadOpAndStartNew<T>(dataPtr);
+		}
 		// Inform caller that data has been received ok.
-		//io_service().post(boost::bind(handler, err));
 		handler(err);
+		//io_service().post(boost::bind(handler, err));
 	}
 
 	template <typename T>
@@ -249,7 +251,7 @@ private:
 			boost::asio::async_read(*this, 
 				boost::asio::buffer(const_cast<char*>(itor->dataPtr_->c_str ()), header_length),
 				boost::bind(&connection::handle_read_header<T>,
-				this, boost::asio::placeholders::error, 
+				shared_from_this(), boost::asio::placeholders::error, 
 				boost::ref(*reinterpret_cast<T*>(itor->dataPos_)),
 				itor->dataPtr_, itor->opHandler_));
 		}
@@ -292,7 +294,6 @@ private:
 			return dataPtr_ == _Right;
 		}
 	};
-
 	typedef std::list<WOpElem> WOpContainer;
 	//pending write operation
 	WOpContainer wop_buf_;
@@ -309,3 +310,4 @@ private:
 };
 
 typedef boost::shared_ptr<connection> connection_ptr;
+}

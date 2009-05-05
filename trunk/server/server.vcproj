@@ -21,6 +21,7 @@
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
+			InheritedPropertySheets="..\..\..\BuildRules\vsprops\private_d.vsprops;..\..\..\BuildRules\vsprops\boost_d.vsprops"
 			CharacterSet="1"
 			>
 			<Tool
@@ -101,6 +102,7 @@
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="1"
+			InheritedPropertySheets="..\..\..\BuildRules\vsprops\private_r.vsprops;..\..\..\BuildRules\vsprops\boost_r.vsprops"
 			CharacterSet="1"
 			WholeProgramOptimization="1"
 			>
@@ -195,7 +197,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath=".\server.cpp"
+				RelativePath=".\sslserver.cpp"
 				>
 			</File>
 			<File
